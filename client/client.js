@@ -828,7 +828,6 @@ window.__ModuleLoader__.load({
       const [panelTheme, setPanelTheme] = useState('auto')
       const lastVersion = useRef(null)
       const lastOutputVersion = useRef(null)
-      const firstProject = useRef(false)
 
       const load = useCallback(async () => {
         try {
@@ -892,11 +891,6 @@ window.__ModuleLoader__.load({
             } else if (version > lastVersion.current) {
               lastVersion.current = version
             }
-            if (!firstProject.current && payload.project && settings.autoHelp === true) {
-              firstProject.current = true
-              showStudioView('help')
-            }
-            if (payload.project) firstProject.current = true
 
             const outputVersion = Number(payload.project?.outputVersion ?? 0)
             if (lastOutputVersion.current === null) {
@@ -1650,13 +1644,6 @@ window.__ModuleLoader__.load({
                 onChange: (event) => setForm({ ...form, autoChart: event.target.checked }),
               }),
               t('autoChart'),
-            ),
-            h('label', { className: 'nvs-check' },
-              h('input', {
-                type: 'checkbox', checked: form.autoHelp === true,
-                onChange: (event) => setForm({ ...form, autoHelp: event.target.checked }),
-              }),
-              t('autoHelp'),
             ),
           ),
           h('div', { className: 'nvs-kv' },
