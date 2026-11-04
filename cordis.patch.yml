@@ -1,0 +1,18 @@
+# dsh-novel-studio bundle patch: inserts the host row into the profile's
+# plugin roster. Install through the in-app plugin manager (plugin_manager
+# install_bundle). Do not add a second manual `insert` with the same id to the
+# profile patch: duplicate ids crash the loader.
+- insert:
+    - id: dsh-novel-studio
+      name: 'dsh-novel-studio'
+      config:
+        enabled: true
+        autoAsk: true
+        defaultRounds: 2
+        roleSet: standard
+        scanThreshold: 70
+        projectDir: novel
+        maxChaptersPerOutline: 500
+        autoChart: true
+        autoHelp: true
+        language: zh
