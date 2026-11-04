@@ -105,3 +105,13 @@ test('intake answers become project fields', () => {
   assert.equal(answers.genre, '言情')
   assert.equal(answers.chapterWords, '2500')
 })
+
+test('re-enabling an existing project only asks the platform', () => {
+  const questions = buildPlatformQuestions({ includeTitle: false })
+  assert.deepEqual(questions.map((item) => item.id), ['platform'])
+})
+
+test('preference stage carries no preset genre or tone', () => {
+  const ids = buildPreferenceQuestions('番茄').map((item) => item.id)
+  assert.deepEqual(ids, ['length', 'chapterWords', 'reviewers', 'twist'])
+})
