@@ -892,7 +892,7 @@ window.__ModuleLoader__.load({
             } else if (version > lastVersion.current) {
               lastVersion.current = version
             }
-            if (!firstProject.current && payload.project && settings.autoHelp !== false) {
+            if (!firstProject.current && payload.project && settings.autoHelp === true) {
               firstProject.current = true
               showStudioView('help')
             }
@@ -1395,7 +1395,7 @@ window.__ModuleLoader__.load({
         chapterWords: 2500,
         scanThreshold: 70,
         autoChart: true,
-        autoHelp: true,
+        autoHelp: false,
         outputMode: 'file',
         autoPopup: true,
         outputDir: '',
@@ -1653,7 +1653,7 @@ window.__ModuleLoader__.load({
             ),
             h('label', { className: 'nvs-check' },
               h('input', {
-                type: 'checkbox', checked: form.autoHelp !== false,
+                type: 'checkbox', checked: form.autoHelp === true,
                 onChange: (event) => setForm({ ...form, autoHelp: event.target.checked }),
               }),
               t('autoHelp'),
