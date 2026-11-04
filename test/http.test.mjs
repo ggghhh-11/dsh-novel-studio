@@ -63,15 +63,17 @@ test('routes are created with exact paths', () => {
     charts: async () => ({}),
     output: async () => ({}),
     hooks: () => ({}),
+    discard: async () => ({ deleted: false }),
     activate: async () => ({ delivered: false }),
     settings: () => ({}),
     roles: () => [],
   })
-  assert.equal(routes.length, 7)
+  assert.equal(routes.length, 8)
   assert.ok(routes.every((route) => route.kind === 'exact'))
   assert.deepEqual(routes.map((route) => route.path).sort(), [
     '/novel-studio/activate',
     '/novel-studio/charts',
+    '/novel-studio/discard',
     '/novel-studio/hooks',
     '/novel-studio/output',
     '/novel-studio/roles',
