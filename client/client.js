@@ -120,6 +120,7 @@ window.__ModuleLoader__.load({
       rightCharts: '图谱',
       rightHooks: '钩子',
       rightText: '文本',
+      rightSettings: '设置',
       rightHelp: '说明',
       hooksEmpty: '还没有钩子记录。生成章纲或正文后会自动记录，便于自查伏笔与悬念。',
       hookOpen: '未回收',
@@ -225,6 +226,7 @@ window.__ModuleLoader__.load({
       rightCharts: 'Map',
       rightHooks: 'Hooks',
       rightText: 'Text',
+      rightSettings: 'Settings',
       rightHelp: 'Help',
       hooksEmpty: 'No hooks recorded yet. Chapter plans and drafts record them automatically for self-review.',
       hookOpen: 'Open',
@@ -566,6 +568,8 @@ window.__ModuleLoader__.load({
 .nvs-right-title{flex:1;min-width:0;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nvs-right-body{flex:1;min-height:0;overflow:auto;padding:12px;box-sizing:border-box}
 .nvs-right .nvs-pre{max-height:none}
+.nvs-right .nvs-field{grid-template-columns:1fr;gap:4px}
+.nvs-right .nvs-field-label{font-size:12px}
 .nvs-hook{border:1px solid var(--dsw-alias-border-l1,#e3e6ea);border-radius:10px;padding:8px 10px;margin:6px 0;background:var(--dsw-alias-bg-layer-1,#fff)}
 .nvs-hook-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .nvs-hook-ch{font-size:11.5px;color:var(--dsw-alias-label-secondary,#5b6470)}
@@ -574,6 +578,19 @@ window.__ModuleLoader__.load({
 .nvs-twist{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .nvs-twist-val{font-weight:600;font-size:12.5px;min-width:34px;text-align:right}
 .nvs-warnbar{border:1px solid var(--dsw-alias-state-warn-primary,#b45309);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#b45309) 10%,transparent);color:var(--dsw-alias-state-warn-primary,#b45309);border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.6;margin:8px 0;display:flex;gap:8px;align-items:flex-start}
+
+/* --- contrast fixes: never rely on a theme token that may be white-on-white */
+.nvs-primary{background:#2f6f5e;border-color:#2f6f5e;color:#fff}
+.nvs-primary:hover{background:#3a816d;filter:none}
+.nvs-tab.on{background:#2f6f5e;border-color:#2f6f5e;color:#fff}
+.nvs-seg button.on{background:#2f6f5e;color:#fff}
+.nvs-chip.on{background:#2f6f5e;border-color:#2f6f5e;color:#fff}
+.nvs-theme-dark .nvs-primary{background:#57b894;border-color:#57b894;color:#0f1512}
+.nvs-theme-dark .nvs-primary:hover{background:#6cc9a5}
+.nvs-theme-dark .nvs-tab.on{background:#57b894;border-color:#57b894;color:#0f1512}
+.nvs-theme-dark .nvs-seg button.on{background:#57b894;color:#0f1512}
+.nvs-theme-dark .nvs-chip.on{background:#57b894;border-color:#57b894;color:#0f1512}
+.nvs-theme-dark .nvs-badge.on{color:#4ade80;border-color:#4ade80}
 `
 
     // ---------------------------------------------------------------------
@@ -1141,6 +1158,9 @@ window.__ModuleLoader__.load({
       const [chartTab, setChartTab] = useState('story')
       const [size, setSize] = useState('m')
       const [copied, setCopied] = useState(false)
+      const [settingsForm, setSettingsForm] = useState(null)
+      const [settingsSaved, setSettingsSaved] = useState(false)
+      const [settingsBusy, setSettingsBusy] = useState(false)
       const FONT = { s: '12.5px', m: '14px', l: '16px' }
 
       const loadAll = useCallback(async () => {
@@ -1153,6 +1173,9 @@ window.__ModuleLoader__.load({
             getJson('/novel-studio/output').catch(() => null),
           ])
           if (statePayload?.settings?.panelTheme) setPanelTheme(statePayload.settings.panelTheme)
+          if (statePayload?.settings) {
+            setSettingsForm((previous) => previous ?? statePayload.settings)
+          }
           if (chartsPayload) setCharts(chartsPayload.data ?? null)
           if (hooksPayload) setHooks(Array.isArray(hooksPayload.hooks) ? hooksPayload.hooks : [])
           if (outputPayload) setTextData(outputPayload)
@@ -1163,6 +1186,21 @@ window.__ModuleLoader__.load({
           setLoading(false)
         }
       }, [])
+
+      const saveSettings = async () => {
+        if (settingsForm === null) return
+        setSettingsBusy(true)
+        try {
+          const payload = await postJson('/novel-studio/settings', settingsForm)
+          setSettingsForm(payload.settings ?? settingsForm)
+          setSettingsSaved(true)
+          setTimeout(() => setSettingsSaved(false), 1600)
+        } catch (cause) {
+          setError(String(cause?.message ?? cause))
+        } finally {
+          setSettingsBusy(false)
+        }
+      }
 
       useEffect(() => {
         loadAll()
@@ -1185,6 +1223,7 @@ window.__ModuleLoader__.load({
         { id: 'charts', label: t('rightCharts') },
         { id: 'hooks', label: t('rightHooks') },
         { id: 'text', label: t('rightText') },
+        { id: 'settings', label: t('rightSettings') },
         { id: 'help', label: t('rightHelp') },
       ]
       const sizeButton = (key, label, title) => h('button', {
@@ -1242,6 +1281,79 @@ window.__ModuleLoader__.load({
                   ),
                 ),
           ) : null,
+          view === 'settings' ? h('div', null,
+            settingsForm === null
+              ? h(Empty, { text: t('loading') })
+              : h('div', null,
+                  h(Field, { label: t('rounds'), hint: t('roundsHint') },
+                    h(Stepper, {
+                      value: settingsForm.rounds ?? 2, min: 0, max: 4,
+                      onChange: (value) => setSettingsForm({ ...settingsForm, rounds: value }),
+                    }),
+                  ),
+                  h(Field, { label: t('chapterWords'), hint: t('wordsHint') },
+                    h(Stepper, {
+                      value: settingsForm.chapterWords ?? 2500, min: 800, max: 8000, step: 100,
+                      onChange: (value) => setSettingsForm({ ...settingsForm, chapterWords: value }),
+                    }),
+                  ),
+                  h(Field, { label: t('threshold'), hint: t('thresholdHint') },
+                    h(Stepper, {
+                      value: settingsForm.scanThreshold ?? 70, min: 50, max: 95,
+                      onChange: (value) => setSettingsForm({ ...settingsForm, scanThreshold: value }),
+                    }),
+                  ),
+                  h(Field, { label: t('twist'), hint: t('twistHint') },
+                    h(Stepper, {
+                      value: settingsForm.twist ?? 30, min: 0, max: 100,
+                      onChange: (value) => setSettingsForm({ ...settingsForm, twist: value }),
+                    }),
+                  ),
+                  h(Field, { label: '平台' },
+                    h('input', {
+                      className: 'nvs-search', type: 'text', value: settingsForm.platform ?? '',
+                      style: { margin: 0 },
+                      placeholder: '番茄',
+                      onChange: (event) => setSettingsForm({ ...settingsForm, platform: event.target.value }),
+                    }),
+                  ),
+                  h(Field, { label: t('outputMode') },
+                    h(Segmented, {
+                      value: settingsForm.outputMode ?? 'file',
+                      options: [
+                        { value: 'file', label: t('outputModeFile') },
+                        { value: 'chat', label: t('outputModeChat') },
+                      ],
+                      onChange: (value) => setSettingsForm({ ...settingsForm, outputMode: value }),
+                    }),
+                  ),
+                  h(Field, { label: t('autoPopup') },
+                    h('label', { className: 'nvs-check' },
+                      h('input', {
+                        type: 'checkbox', checked: settingsForm.autoPopup !== false,
+                        onChange: (event) => setSettingsForm({ ...settingsForm, autoPopup: event.target.checked }),
+                      }),
+                      settingsForm.autoPopup !== false ? t('on') : t('off'),
+                    ),
+                  ),
+                  h(Field, { label: t('panelTheme') },
+                    h(Segmented, {
+                      value: settingsForm.panelTheme ?? 'auto',
+                      options: [
+                        { value: 'auto', label: t('themeAuto') },
+                        { value: 'light', label: t('themeLight') },
+                        { value: 'dark', label: t('themeDark') },
+                      ],
+                      onChange: (value) => setSettingsForm({ ...settingsForm, panelTheme: value }),
+                    }),
+                  ),
+                  h('div', { className: 'nvs-actions', style: { marginBottom: 0 } },
+                    h('button', { className: 'nvs-primary', onClick: saveSettings, disabled: settingsBusy }, t('save')),
+                    settingsSaved ? h('span', { className: 'nvs-toast' }, `✓ ${t('saved')}`) : null,
+                  ),
+                  h('p', { className: 'nvs-hint', style: { marginTop: 8 } }, '审稿角色请在侧边栏「小说创作」主面板勾选。'),
+                ),
+          ) : null,
           view === 'help' ? h(HelpView, { t, locale }) : null,
         ),
       )
@@ -1273,6 +1385,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('')
       const [busy, setBusy] = useState(false)
       const [saved, setSaved] = useState(false)
+      const [pendingDelete, setPendingDelete] = useState('')
       const [roles, setRoles] = useState([])
       const [showRoles, setShowRoles] = useState(false)
       const [roleQuery, setRoleQuery] = useState('')
@@ -1343,6 +1456,19 @@ window.__ModuleLoader__.load({
           setForm(payload.settings ?? form)
           setSaved(true)
           setTimeout(() => setSaved(false), 1600)
+        } catch (cause) {
+          setError(String(cause?.message ?? cause))
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      const removeProject = async (slug) => {
+        setBusy(true)
+        try {
+          await postJson('/novel-studio/discard', { slug, confirm: true })
+          setPendingDelete('')
+          await refresh()
         } catch (cause) {
           setError(String(cause?.message ?? cause))
         } finally {
@@ -1604,8 +1730,21 @@ window.__ModuleLoader__.load({
         ),
         h(PanelCard, { title: t('recent'), sub: projects.length === 0 ? t('noProjects') : null },
           projects.map((item) => h('div', { className: 'nvs-kv', key: item.slug },
-            h('span', null, item.title),
-            h('small', null, `${item.stage} · ${item.chapters} 章 · ${String(item.updatedAt ?? '').slice(0, 16).replace('T', ' ')}`),
+            h('span', { style: { flex: 1, minWidth: 0 } }, item.title),
+            h('small', null, `${item.stage} · ${item.chapters} 章`),
+            pendingDelete === item.slug
+              ? h('button', {
+                  className: 'nvs-btn',
+                  style: { color: '#e05252', padding: '4px 8px', fontSize: 11.5 },
+                  onClick: () => removeProject(item.slug),
+                  disabled: busy,
+                }, '确认删除')
+              : h('button', {
+                  className: 'nvs-btn',
+                  style: { padding: '4px 8px', fontSize: 11.5 },
+                  onClick: () => setPendingDelete(item.slug),
+                  disabled: busy,
+                }, '删除'),
           )),
         ),
         h('p', { className: 'nvs-note', style: { textAlign: 'center', marginTop: 10 } }, t('triggerHint')),
