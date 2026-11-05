@@ -109,6 +109,8 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
 | `style` | 查看作者风格记忆；`clear=true` 清空、`enabled=false` 关闭注入 |
 | `platform_scan` | 按平台检索公开信息，返回来源、平台趋势分析师提示词与平台风向块 |
 | `platform_brief` | 保存 3–6 条当前平台风向/禁忌（`guidance`），自动注入后续生成与审稿；`clear=true` 清空 |
+| `next` | 返回当前阶段可执行的操作清单，用于先问用户「要生成什么」 |
+| `debate_plan` | 审稿分歧辩论：`disputes` 生成两轮交叉质询 + 裁决主持 workflow 脚本 |
 | `settings` | 读写面板快捷设置（含输出方式/目录/自动预览/主题/跳脱值） |
 
 ### `novel_scan`
@@ -224,7 +226,11 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
 - 两个工艺角色（通顺度与可读性审校员、AI 味猎手）无论怎么选都会保留，避免漏掉最关键的检查；
 - 也可以直接对模型说「这轮只用逻辑、合规、读者体验和 AI 味猎手」。
 
-审稿流程：主模型写稿 → `review_plan` → 用 `workflow` 工具并行子智能体 → 主模型整合（同一问题 ≥2 角色提出或合规/逻辑硬伤 = 必修）→ 改写 → `novel_scan` 复扫 → 未达标则下一轮。轮次默认 2，可设 0–4。
+审稿流程：主模型写稿 → `review_plan` → 用 `workflow` 工具并行子智能体 → **裁决**（accept/partial/reject + 给子智能体的回执）→ 有实质分歧时 `debate_plan` 拉相关子智能体交叉质询 → 主模型最终裁决 → 改写 → `novel_scan` 复扫 → 未达标则下一轮。轮次默认 2，可设 0–4。
+
+注意：默认 `standard` 预设按目标取 7–11 个角色（正文 11 个），总角色数是 32；`review_plan` 会显示「11/32」，全开传 `roleSet='all'` 或在侧边栏全选。
+
+`brief` 保存后不会直接生成：插件返回「下一步选项」，模型必须先问用户要生成全书大纲、章纲还是正文，得到选择后才调用对应 action。
 
 ### 并行审稿
 
