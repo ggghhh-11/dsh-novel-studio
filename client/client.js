@@ -1683,6 +1683,8 @@ window.__ModuleLoader__.load({
                   h(Stat, { label: t('rounds'), value: String(project.rounds ?? 2) }),
                   h(Stat, { label: t('rightHooks'), value: `${project.hooksOpen ?? 0}/${project.hooksTotal ?? 0}` }),
                   h(Stat, { label: t('twist'), value: String(project.twist ?? 30) }),
+                  h(Stat, { label: '平台', value: project.platform || '未指定' }),
+                  h(Stat, { label: '风向', value: `${(project.platformGuidance ?? []).length} 条` }),
                 ),
                 state?.lastOutput
                   ? h('div', { className: 'nvs-kv' },
