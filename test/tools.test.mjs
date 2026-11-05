@@ -317,3 +317,67 @@ test('platform direction is injected into draft and review prompts', async () =>
   assert.equal(cleared.ok, true)
   assert.deepEqual(cleared.data.guidance, [])
 })
+
+test('brief asks what to generate instead of returning the outline instruction', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '确认测试' }, exec)
+  const brief = await studio.execute({ action: 'brief', answers: { genre: '悬疑' } }, exec)
+  assert.equal(brief.ok, true)
+  assert.equal(brief.data.askNext, true)
+  assert.ok(Array.isArray(brief.data.nextChoices))
+  assert.ok(brief.message.includes('先问用户'))
+  assert.ok(!brief.message.includes('## 落盘'))
+
+  const next = await studio.execute({ action: 'next' }, exec)
+  assert.ok(Array.isArray(next.data.options))
+  assert.ok(next.data.options.some((item) => item.id === 'draft'))
+
+  const draftNoChapter = await studio.execute({ action: 'draft' }, exec)
+  assert.equal(draftNoChapter.data.askChapter, true)
+})
+
+test('review_plan reports 11/32 and debate_plan renders a cross-examination script', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '审稿测试' }, exec)
+  await studio.execute({ action: 'brief', answers: { genre: '悬疑' } }, exec)
+
+  const plan = await studio.execute({ action: 'review_plan', target: 'draft', round: 1 }, exec)
+  assert.equal(plan.data.totalRoles, 32)
+  assert.equal(plan.data.roleCount, 11)
+  assert.ok(plan.message.includes('11/32'))
+
+  const debate = await studio.execute({
+    action: 'debate_plan',
+    disputes: [{
+      id: 'd1',
+      issue: '节奏太快还是太慢',
+      positions: [
+        { role: 'hook-pace-inspector', stance: '太快', evidence: '第一章' },
+        { role: 'reader-experience-officer', stance: '铺垫不足', evidence: '第一章' },
+      ],
+      decision: { verdict: 'partial', reason: '保留但补一句' },
+    }],
+  }, exec)
+  assert.equal(debate.ok, true)
+  assert.equal(debate.data.disputes.length, 1)
+  assert.ok(debate.data.workflowScript.includes('parallel('))
+  assert.ok(debate.data.workflowScript.includes('裁决主持'))
+})
+
+test('record stores final decisions', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '裁决测试' }, exec)
+  const projectDir = path.join(cwd, 'novel', fs.readdirSync(path.join(cwd, 'novel'))[0])
+  const decisions = [{ issue: '节奏', role: 'hook-pace-inspector', verdict: 'reject', reason: '会破坏伏笔', outcome: '保留' }]
+  const recorded = await studio.execute({ action: 'record', round: 1, target: 'draft', findings: 1, decisions }, exec)
+  assert.equal(recorded.ok, true)
+  const raw = JSON.parse(fs.readFileSync(path.join(projectDir, 'reviews', 'round-1-draft.json'), 'utf8'))
+  assert.equal(raw.decisions.length, 1)
+  assert.equal(raw.decisions[0].verdict, 'reject')
+})
