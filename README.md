@@ -104,7 +104,9 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
 | `resume` | 读取暂停检查点，返回是否在 5 分钟窗口内与询问选项 |
 | `checkpoint` | 保存当前进度（`checkpoint.md/json`），下次说「继续写」恢复 |
 | `discard` | 放弃本次写作并删除项目目录（需 `confirm=true` 二次确认） |
-| `output_done` | 登记刚写入的 TXT（`file` + `kind`），触发右栏文本预览并记录版本 |
+| `output_done` | 登记刚写入的 TXT（`file` + `kind`），触发右栏文本预览、记录版本并备份到 `versions/` |
+| `learn_style` | 回输用户改稿：`revised`/`revisedPath` + 原稿（`original`/`originalPath`/`chapter`），比对并写入作者风格记忆 |
+| `style` | 查看作者风格记忆；`clear=true` 清空、`enabled=false` 关闭注入 |
 | `settings` | 读写面板快捷设置（含输出方式/目录/自动预览/主题/跳脱值） |
 
 ### `novel_scan`
@@ -125,6 +127,30 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
 - **章纲数量**：任意（1–500），例如「一次生成 30 章」「一次 100 章」；插件会把整批写进一个 TXT。
 - **批量正文**：1–3 章，默认 1；批量正文会稀释质量，插件会提示。
 - **总量规划**：大纲阶段可给总字数/总章数，自动反推卷章规模（例如 100 万字 ÷ 2500 字 ≈ 400 章）。
+
+## 作者风格记忆
+
+用户改完稿后，把改稿回输，插件会**确定性比对**原稿与改稿，提取修改并归纳为写作偏好。
+
+### 怎么回输
+
+- **右栏「风格」页**：粘贴改稿全文（可选章号），点「学习这篇改稿」；原稿会自动从最近输出或 `versions/` 版本备份里找；
+- **对话**：直接粘贴改稿并说「这是我改好的稿子」，模型调用 `learn_style`；
+- 也可以给文件路径：`revisedPath`（改稿）+ `originalPath`（原稿，可选）。
+
+### 比对什么
+
+- 段落/句子级差异（增删改、改动比例、增删字数）；
+- 句长、段长、对话占比的变化；
+- 用户删掉的 AI 套话（`不禁`、`仿佛`…）；
+- 用词替换（如 `说道 → 开口`）；
+- 标点偏好（省略号/破折号/感叹号）。
+
+生成的偏好会存入 `style-memory.json`；下次大纲/章纲/正文的指令自动带上「作者风格记忆」块，审稿子智能体也会看到。右栏可随时关闭注入（保留记忆）或清空。
+
+### 面板新建小说
+
+左侧栏工作台面板新增「新建小说」卡片：书名、平台、题材、文风、篇幅、每章字数、跳脱值，直接创建项目。创建后回对话说「继续写《书名》」即可进入流水线；同名项目不会覆盖。
 
 ## 输出与预览
 
@@ -244,11 +270,14 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
   charts.json           图谱数据
   reviews/round-N-*.json
   history/              改写前旧版
+  versions/             output_done 自动备份（每文件最近 3 份）
 <输出目录（默认项目目录）>/
   大纲.txt
   第001-030章-章纲.txt
   第001章.txt
 ```
+
+插件自身的作者风格记忆保存在 profile 目录的 `.novel-studio/style-memory.json`（只存 diff 摘要与偏好结论，不存全文；可清空）。
 
 插件自身运行状态（侧边栏设置、输出方式、激活请求）保存在 profile 目录的 `.novel-studio/runtime.json`。
 
