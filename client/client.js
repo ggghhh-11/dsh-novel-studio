@@ -400,6 +400,7 @@ window.__ModuleLoader__.load({
 .nvs-hint{font-size:12px;color:var(--dsw-alias-label-secondary,#5b6470);margin:0 0 8px;line-height:1.6}
 .nvs-empty{padding:28px 12px;text-align:center;font-size:13px;color:var(--dsw-alias-label-secondary,#5b6470);line-height:1.8}
 .nvs-legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--dsw-alias-label-secondary,#5b6470);margin-top:8px}
+.nvs-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
 .nvs-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
 .nvs-close{border:none;background:transparent;color:var(--dsw-alias-label-secondary,#5b6470);font-size:18px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
 .nvs-close:hover{background:var(--dsw-alias-bg-layer-2,#f6f7f9)}
@@ -701,7 +702,7 @@ window.__ModuleLoader__.load({
 
     function StoryChart({ data }) {
       const chapters = data.chapters
-      if (chapters.length === 0) return h(Empty, { text: '还没有章节张力数据。' })
+      if (chapters.length === 0) return h(Empty, { text: '还没有章节张力数据：项目里有正文后会自动统计，也可以让模型调用 chart 提交手写数据。' })
       const maxNo = chapters[chapters.length - 1].no
       const minNo = chapters[0].no
       const span = Math.max(1, maxNo - minNo)
@@ -730,56 +731,103 @@ window.__ModuleLoader__.load({
     }
 
     function RelationsChart({ data }) {
+      const [hovered, setHovered] = useState('')
       const characters = data.characters
-      if (characters.length === 0) return h(Empty, { text: '还没有人物数据。大纲生成后会自动出现。' })
+      const relations = Array.isArray(data.relations) ? data.relations : []
+      if (characters.length === 0) {
+        return h(Empty, { text: '还没有人物数据。生成大纲并让模型调用 chart 提交人物/关系后，这里会显示关系网。' })
+      }
       const degree = new Map()
-      for (const relation of data.relations) {
+      for (const relation of relations) {
         degree.set(relation.from, (degree.get(relation.from) ?? 0) + 1)
         degree.set(relation.to, (degree.get(relation.to) ?? 0) + 1)
       }
       const cx = CHART_W / 2
-      const cy = CHART_H / 2 + 6
-      const radius = Math.min(CHART_W, CHART_H) * 0.33
+      const cy = CHART_H / 2
+      const radius = Math.min(CHART_W, CHART_H) * 0.36
       const positions = new Map()
       characters.forEach((character, index) => {
         const angle = (Math.PI * 2 * index) / characters.length - Math.PI / 2
-        positions.set(character.id, { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius })
+        positions.set(character.id, {
+          x: cx + Math.cos(angle) * radius,
+          y: cy + Math.sin(angle) * radius,
+          angle,
+        })
       })
-      const colorOf = (role) => (role === '主角' ? 'var(--dsw-alias-brand-primary,#2f6f5e)'
-        : role === '反派' ? 'var(--dsw-alias-state-error-primary,#c0392b)'
-        : role === '配角' ? 'var(--dsw-alias-state-warn-primary,#b45309)'
+      const roleColor = (role) => (role.includes('主角') ? 'var(--dsw-alias-brand-primary,#2f6f5e)'
+        : role.includes('反派') ? 'var(--dsw-alias-state-error-primary,#c0392b)'
+        : role.includes('配角') ? 'var(--dsw-alias-state-warn-primary,#b45309)'
         : 'var(--dsw-alias-state-idle-primary,#8a94a0)')
-      return h('svg', { viewBox: `0 0 ${CHART_W} ${CHART_H}`, style: { width: '100%', height: 'auto' }, role: 'img', 'aria-label': 'character relations' },
-        data.relations.map((relation, index) => {
-          const from = positions.get(relation.from)
-          const to = positions.get(relation.to)
-          if (from === undefined || to === undefined) return null
-          const opposing = /敌对|对立|仇|背叛|冲突/u.test(relation.label)
-          return h('g', { key: `r${index}` },
-            h('line', {
-              x1: from.x, y1: from.y, x2: to.x, y2: to.y,
-              stroke: opposing ? 'var(--dsw-alias-state-error-primary,#c0392b)' : 'var(--dsw-alias-border-l2,#c9ced6)',
-              strokeWidth: Math.max(1, relation.strength),
-              strokeDasharray: opposing ? '5 4' : undefined,
-              opacity: 0.85,
-            }, h('title', null, `${relation.label}（强度 ${relation.strength}）`)),
-          )
-        }),
-        characters.map((character) => {
-          const position = positions.get(character.id)
-          const size = 12 + Math.min(10, (degree.get(character.id) ?? 0) * 2)
-          return h('g', { key: character.id },
-            h('circle', { cx: position.x, cy: position.y, r: size, fill: colorOf(character.role), opacity: 0.9 },
-              h('title', null, `${character.name}｜${character.role}${character.group ? `｜${character.group}` : ''}`)),
-            h('text', { x: position.x, y: position.y + size + 13, fontSize: 11, textAnchor: 'middle', fill: 'var(--dsw-alias-label-primary,#1f2328)' }, character.name),
-          )
-        }),
+      const isOpposing = (label) => /敌对|对立|仇|背叛|冲突|对抗/u.test(label)
+      return h('div', null,
+        h('svg', { viewBox: `0 0 ${CHART_W} ${CHART_H}`, style: { width: '100%', height: 'auto' }, role: 'img', 'aria-label': 'character relations' },
+          relations.map((relation, index) => {
+            const from = positions.get(relation.from)
+            const to = positions.get(relation.to)
+            if (from === undefined || to === undefined) return null
+            const active = hovered === relation.from || hovered === relation.to
+            const opposing = isOpposing(relation.label)
+            const midX = (from.x + to.x) / 2
+            const midY = (from.y + to.y) / 2
+            const labelWidth = Math.max(18, [...relation.label].length * 9 + 10)
+            return h('g', { key: `r${index}`, opacity: hovered === '' || active ? 1 : 0.15 },
+              h('line', {
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                stroke: opposing ? 'var(--dsw-alias-state-error-primary,#c0392b)' : 'var(--dsw-alias-border-l2,#c9ced6)',
+                strokeWidth: 1 + Math.min(2, relation.strength * 0.4),
+                strokeDasharray: opposing ? '5 4' : undefined,
+              }),
+              h('rect', {
+                x: midX - labelWidth / 2, y: midY - 8, width: labelWidth, height: 14, rx: 7,
+                fill: 'var(--dsw-alias-bg-layer-1,#fff)', opacity: 0.92,
+              }),
+              h('text', {
+                x: midX, y: midY + 2, fontSize: 9, textAnchor: 'middle',
+                fill: opposing ? 'var(--dsw-alias-state-error-primary,#c0392b)' : 'var(--dsw-alias-label-secondary,#5b6470)',
+              }, relation.label),
+            )
+          }),
+          characters.map((character) => {
+            const position = positions.get(character.id)
+            const size = 6 + Math.min(9, (degree.get(character.id) ?? 0) * 1.6) + (character.role.includes('主角') ? 3 : 0)
+            const below = position.angle > Math.PI / 2 && position.angle < (Math.PI * 3) / 2
+            const labelY = below ? position.y + size + 13 : position.y - size - 6
+            return h('g', {
+              key: character.id,
+              style: { cursor: 'pointer' },
+              opacity: hovered === '' || hovered === character.id ? 1 : 0.3,
+              onMouseEnter: () => setHovered(character.id),
+              onMouseLeave: () => setHovered(''),
+            },
+              h('circle', { cx: position.x, cy: position.y, r: size + 5, fill: 'transparent' }),
+              h('circle', {
+                cx: position.x, cy: position.y, r: size,
+                fill: roleColor(character.role),
+                stroke: hovered === character.id ? 'var(--dsw-alias-label-primary,#1f2328)' : 'transparent',
+                strokeWidth: 2,
+              }),
+              h('text', {
+                x: position.x, y: labelY, fontSize: 11, textAnchor: 'middle',
+                fill: 'var(--dsw-alias-label-primary,#1f2328)',
+                style: { paintOrder: 'stroke', stroke: 'var(--dsw-alias-bg-layer-1,#fff)', strokeWidth: 4 },
+              }, character.name),
+            )
+          }),
+        ),
+        h('div', { className: 'nvs-legend' },
+          h('span', null, h('i', { className: 'nvs-dot', style: { background: 'var(--dsw-alias-brand-primary,#2f6f5e)' } }), '主角'),
+          h('span', null, h('i', { className: 'nvs-dot', style: { background: 'var(--dsw-alias-state-error-primary,#c0392b)' } }), '反派'),
+          h('span', null, h('i', { className: 'nvs-dot', style: { background: 'var(--dsw-alias-state-warn-primary,#b45309)' } }), '配角'),
+          h('span', null, h('i', { className: 'nvs-dot', style: { background: 'var(--dsw-alias-state-idle-primary,#8a94a0)' } }), '其他'),
+          h('span', null, '虚线 = 对立'),
+        ),
+        h('p', { className: 'nvs-hint' }, '悬停节点高亮关系；节点大小=关系数量，颜色=角色定位。'),
       )
     }
 
     function PacingChart({ data }) {
       const chapters = data.chapters
-      if (chapters.length === 0) return h(Empty, { text: '还没有章节数据。' })
+      if (chapters.length === 0) return h(Empty, { text: '还没有章节数据：项目里有正文后会自动统计篇幅与钩子。' })
       const maxWords = Math.max(...chapters.map((item) => item.words), 1)
       const slot = (CHART_W - PAD - 18) / Math.max(1, chapters.length)
       const barWidth = Math.max(4, Math.min(26, slot * 0.56))
@@ -805,7 +853,7 @@ window.__ModuleLoader__.load({
 
     function MetricsChart({ data, threshold = 70 }) {
       const metrics = data.metrics
-      if (metrics.length === 0) return h(Empty, { text: '还没有审校记录。跑完一轮审稿后会出现。' })
+      if (metrics.length === 0) return h(Empty, { text: '还没有审校记录：跑完一轮审稿会记录；有正文时也会先按章节估算。' })
       const slot = (CHART_W - PAD - 18) / Math.max(1, metrics.length - 1)
       const x = (index) => PAD + slot * index
       const y = (value) => CHART_H - PAD - (value / 100) * (CHART_H - PAD * 1.4)
@@ -1339,6 +1387,7 @@ window.__ModuleLoader__.load({
               h('button', { className: 'nvs-btn', onClick: () => setChartTab((prev) => prev === 'story' ? 'relations' : prev === 'relations' ? 'pacing' : prev === 'pacing' ? 'metrics' : 'story') }, '›'),
             ),
             h('p', { className: 'nvs-hint' }, t(TAB_META[chartTab].hintKey)),
+            data.estimated ? h('p', { className: 'nvs-hint' }, '张力/钩子/审校为按章节文本自动估算的代理指标；模型调用 chart 提交的手写数据优先。') : null,
             h(ChartBody, { tab: chartTab, data, threshold: 70 }),
             data.summary ? h('p', { className: 'nvs-hint', style: { marginTop: 8 } }, `${t('chartSummary')}：${data.summary}`) : null,
             h('div', { className: 'nvs-legend' }, CHART_TABS.map((id, idx) => h('span', { key: id },
