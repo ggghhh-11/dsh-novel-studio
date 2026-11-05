@@ -1,6 +1,6 @@
 {
   "name": "dsh-novel-studio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "小说创作工作台：意图触发、创作模板、大纲/章纲/正文流水线、多子智能体评审、AI 味扫描与可视化故事图谱。",
   "main": "lib/index.js",
