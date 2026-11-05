@@ -283,3 +283,37 @@ test('learn_style stores traits and injects them into draft', async () => {
   assert.equal(cleared.ok, true)
   assert.equal(cleared.data.cleared, true)
 })
+
+test('platform direction is injected into draft and review prompts', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '番茄书', platform: '番茄' }, exec)
+  const draft = await studio.execute({ action: 'draft', chapter: 1 }, exec)
+  assert.ok(draft.message.includes('## 平台风向：番茄'))
+  assert.ok(draft.message.includes('开篇 300 字'))
+
+  const saved = await studio.execute({
+    action: 'platform_brief',
+    guidance: ['开篇必须死人', '每章留一个未解问题'],
+  }, exec)
+  assert.equal(saved.ok, true)
+  assert.equal(saved.data.guidance.length, 2)
+  const draft2 = await studio.execute({ action: 'draft', chapter: 2 }, exec)
+  assert.ok(draft2.message.includes('开篇必须死人'))
+  assert.ok(draft2.message.includes('每章留一个未解问题'))
+
+  const plan = await studio.execute({ action: 'review_plan' }, exec)
+  assert.ok(plan.data.reviewers[0].prompt.includes('## 平台风向：番茄'))
+  assert.ok(plan.data.reviewers.some((reviewer) => reviewer.id === 'hook-pace-inspector' && reviewer.prompt.includes('800–1200')))
+
+  const switched = await studio.execute({ action: 'start', title: '番茄书', platform: '起点' }, exec)
+  assert.equal(switched.ok, true)
+  const draft3 = await studio.execute({ action: 'draft', chapter: 3 }, exec)
+  assert.ok(draft3.message.includes('## 平台风向：起点'))
+  assert.ok(!draft3.message.includes('开篇必须死人'))
+
+  const cleared = await studio.execute({ action: 'platform_brief', clear: true }, exec)
+  assert.equal(cleared.ok, true)
+  assert.deepEqual(cleared.data.guidance, [])
+})
