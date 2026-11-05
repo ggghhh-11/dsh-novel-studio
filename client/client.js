@@ -120,8 +120,19 @@ window.__ModuleLoader__.load({
       rightCharts: '图谱',
       rightHooks: '钩子',
       rightText: '文本',
+      rightStyle: '风格',
       rightSettings: '设置',
       rightHelp: '说明',
+      styleEmpty: '还没有学习过改稿。粘贴用户改好的章节，插件会比对并记住写作偏好。',
+      learnStyle: '回输改稿',
+      stylePlaceholder: '把改好的章节全文粘贴到这里…',
+      chapterNo: '章号',
+      learnButton: '学习这篇改稿',
+      clearStyle: '清空记忆',
+      confirmClear: '确认清空',
+      newProject: '新建小说',
+      createProject: '创建项目',
+      createHint: '创建后回到对话说「继续写《书名》」即可开始。',
       hooksEmpty: '还没有钩子记录。生成章纲或正文后会自动记录，便于自查伏笔与悬念。',
       hookOpen: '未回收',
       hookResolved: '已回收',
@@ -226,8 +237,19 @@ window.__ModuleLoader__.load({
       rightCharts: 'Map',
       rightHooks: 'Hooks',
       rightText: 'Text',
+      rightStyle: 'Style',
       rightSettings: 'Settings',
       rightHelp: 'Help',
+      styleEmpty: 'No style memory yet. Paste an edited chapter and the plugin will diff it and remember your preferences.',
+      learnStyle: 'Learn from revision',
+      stylePlaceholder: 'Paste the edited chapter here…',
+      chapterNo: 'Ch',
+      learnButton: 'Learn',
+      clearStyle: 'Clear',
+      confirmClear: 'Confirm clear',
+      newProject: 'New novel',
+      createProject: 'Create',
+      createHint: 'Then return to the chat and say "continue writing <title>".',
       hooksEmpty: 'No hooks recorded yet. Chapter plans and drafts record them automatically for self-review.',
       hookOpen: 'Open',
       hookResolved: 'Resolved',
@@ -1155,21 +1177,29 @@ window.__ModuleLoader__.load({
       const [settingsForm, setSettingsForm] = useState(null)
       const [settingsSaved, setSettingsSaved] = useState(false)
       const [settingsBusy, setSettingsBusy] = useState(false)
+      const [styleMemory, setStyleMemory] = useState(null)
+      const [styleDraft, setStyleDraft] = useState('')
+      const [styleChapter, setStyleChapter] = useState('')
+      const [styleBusy, setStyleBusy] = useState(false)
+      const [styleMessage, setStyleMessage] = useState('')
+      const [styleConfirmClear, setStyleConfirmClear] = useState(false)
       const FONT = { s: '12.5px', m: '14px', l: '16px' }
 
       const loadAll = useCallback(async () => {
         setLoading(true)
         try {
-          const [statePayload, chartsPayload, hooksPayload, outputPayload] = await Promise.all([
+          const [statePayload, chartsPayload, hooksPayload, outputPayload, stylePayload] = await Promise.all([
             getJson('/novel-studio/state').catch(() => null),
             getJson('/novel-studio/charts').catch(() => null),
             getJson('/novel-studio/hooks').catch(() => null),
             getJson('/novel-studio/output').catch(() => null),
+            getJson('/novel-studio/style').catch(() => null),
           ])
           if (statePayload?.settings?.panelTheme) setPanelTheme(statePayload.settings.panelTheme)
           if (statePayload?.settings) {
             setSettingsForm((previous) => previous ?? statePayload.settings)
           }
+          if (stylePayload) setStyleMemory(stylePayload.memory ?? null)
           if (chartsPayload) setCharts(chartsPayload.data ?? null)
           if (hooksPayload) setHooks(Array.isArray(hooksPayload.hooks) ? hooksPayload.hooks : [])
           if (outputPayload) setTextData(outputPayload)
@@ -1202,6 +1232,65 @@ window.__ModuleLoader__.load({
         return () => clearInterval(timer)
       }, [loadAll])
 
+      const learnStyle = async () => {
+        if (styleDraft.trim().length < 100) {
+          setStyleMessage('改稿至少 100 字，先粘贴完整内容再学习。')
+          return
+        }
+        setStyleBusy(true)
+        setStyleMessage('')
+        try {
+          const body = { revised: styleDraft }
+          const chapter = Number.parseInt(styleChapter, 10)
+          if (Number.isFinite(chapter) && chapter > 0) body.chapter = chapter
+          const payload = await postJson('/novel-studio/learn', body)
+          if (payload.duplicate) {
+            setStyleMessage('这篇改稿之前学习过，没有重复记录。')
+          } else if (payload.unchanged) {
+            setStyleMessage('改稿与原稿完全相同，没有检测到修改。')
+          } else {
+            const traits = Array.isArray(payload.traits) ? payload.traits : []
+            setStyleMessage(`已学习：${payload.stats?.changes ?? 0} 处修改，新增 ${traits.length} 条偏好。`)
+            setStyleDraft('')
+          }
+          await loadAll()
+        } catch (cause) {
+          setStyleMessage(String(cause?.message ?? cause))
+        } finally {
+          setStyleBusy(false)
+        }
+      }
+
+      const clearStyle = async () => {
+        if (!styleConfirmClear) {
+          setStyleConfirmClear(true)
+          return
+        }
+        setStyleBusy(true)
+        try {
+          await postJson('/novel-studio/style', { clear: true })
+          setStyleConfirmClear(false)
+          setStyleMessage('作者风格记忆已清空。')
+          await loadAll()
+        } catch (cause) {
+          setStyleMessage(String(cause?.message ?? cause))
+        } finally {
+          setStyleBusy(false)
+        }
+      }
+
+      const toggleStyle = async (enabled) => {
+        setStyleBusy(true)
+        try {
+          await postJson('/novel-studio/style', { enabled })
+          await loadAll()
+        } catch (cause) {
+          setStyleMessage(String(cause?.message ?? cause))
+        } finally {
+          setStyleBusy(false)
+        }
+      }
+
       const data = charts ?? { chapters: [], characters: [], relations: [], metrics: [], summary: '' }
       const text = typeof textData?.text === 'string' ? textData.text : ''
       const copy = async () => {
@@ -1217,6 +1306,7 @@ window.__ModuleLoader__.load({
         { id: 'charts', label: t('rightCharts') },
         { id: 'hooks', label: t('rightHooks') },
         { id: 'text', label: t('rightText') },
+        { id: 'style', label: t('rightStyle') },
         { id: 'settings', label: t('rightSettings') },
         { id: 'help', label: t('rightHelp') },
       ]
@@ -1273,6 +1363,45 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'nvs-actions', style: { marginBottom: 0 } },
                     h('button', { className: 'nvs-btn', onClick: copy }, copied ? t('copied') : t('copy')),
                   ),
+                ),
+          ) : null,
+          view === 'style' ? h('div', null,
+            styleMemory === null
+              ? h(Empty, { text: t('loading') })
+              : h('div', null,
+                  h('div', { className: 'nvs-meta' },
+                    h('span', null, `${(styleMemory.traits ?? []).length} 条偏好 · ${(styleMemory.samples ?? []).length} 个样本 · ${(styleMemory.vocab ?? []).length} 对替换`),
+                    h('button', {
+                      className: 'nvs-btn', style: { marginLeft: 'auto' },
+                      onClick: () => toggleStyle(!(styleMemory.enabled !== false)),
+                      disabled: styleBusy,
+                    }, styleMemory.enabled !== false ? t('on') : t('off')),
+                  ),
+                  (styleMemory.traits ?? []).length === 0
+                    ? h(Empty, { text: t('styleEmpty') })
+                    : h('div', null, (styleMemory.traits ?? []).map((trait) => h('div', { className: 'nvs-hook', key: trait.id ?? trait.text },
+                        h('p', { className: 'nvs-hook-text' }, trait.text),
+                        h('span', { className: 'nvs-hint' }, `命中 ${trait.hits ?? 1} 次`),
+                      ))),
+                  h('div', { className: 'nvs-role-group-title', style: { marginTop: 12 } }, t('learnStyle')),
+                  h('textarea', {
+                    className: 'nvs-search', rows: 6,
+                    style: { width: '100%', margin: '0 0 6px', fontFamily: 'inherit', resize: 'vertical' },
+                    placeholder: t('stylePlaceholder'),
+                    value: styleDraft,
+                    onChange: (event) => setStyleDraft(event.target.value),
+                  }),
+                  h('div', { className: 'nvs-actions', style: { margin: '0 0 6px' } },
+                    h('input', {
+                      className: 'nvs-search', type: 'text', style: { margin: 0, maxWidth: 90 },
+                      placeholder: t('chapterNo'), value: styleChapter,
+                      onChange: (event) => setStyleChapter(event.target.value.replace(/[^\d]/g, '')),
+                    }),
+                    h('button', { className: 'nvs-primary', onClick: learnStyle, disabled: styleBusy }, styleBusy ? t('loading') : t('learnButton')),
+                    h('button', { className: 'nvs-btn', onClick: clearStyle, disabled: styleBusy }, styleConfirmClear ? t('confirmClear') : t('clearStyle')),
+                  ),
+                  styleMessage ? h('p', { className: 'nvs-hint' }, styleMessage) : null,
+                  h('p', { className: 'nvs-hint' }, '原稿会自动从最近输出或版本备份中查找；找不到时，请在对话里把原稿一起发给模型。'),
                 ),
           ) : null,
           view === 'settings' ? h('div', null,
@@ -1380,6 +1509,17 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false)
       const [saved, setSaved] = useState(false)
       const [pendingDelete, setPendingDelete] = useState('')
+      const [createForm, setCreateForm] = useState({
+        title: '',
+        platform: '番茄',
+        genre: '',
+        tone: '',
+        length: '长篇连载',
+        chapterWords: 2500,
+        twist: 30,
+      })
+      const [createBusy, setCreateBusy] = useState(false)
+      const [createMessage, setCreateMessage] = useState('')
       const [roles, setRoles] = useState([])
       const [showRoles, setShowRoles] = useState(false)
       const [roleQuery, setRoleQuery] = useState('')
@@ -1467,6 +1607,26 @@ window.__ModuleLoader__.load({
           setError(String(cause?.message ?? cause))
         } finally {
           setBusy(false)
+        }
+      }
+
+      const createProject = async () => {
+        if (createForm.title.trim().length === 0) {
+          setCreateMessage('先给新书起个名字。')
+          return
+        }
+        setCreateBusy(true)
+        setCreateMessage('')
+        try {
+          const payload = await postJson('/novel-studio/create', createForm)
+          const title = payload.project?.title ?? createForm.title
+          setCreateMessage(`已创建《${title}》。回到对话说「继续写《${title}》」即可开始。`)
+          setCreateForm((previous) => ({ ...previous, title: '', genre: '', tone: '' }))
+          await refresh()
+        } catch (cause) {
+          setCreateMessage(String(cause?.message ?? cause))
+        } finally {
+          setCreateBusy(false)
         }
       }
 
@@ -1715,7 +1875,63 @@ window.__ModuleLoader__.load({
                 }),
               ),
         ),
+        h(PanelCard, { title: t('newProject') },
+          h(Field, { label: '书名' },
+            h('input', {
+              className: 'nvs-search', type: 'text', value: createForm.title,
+              placeholder: '新书书名',
+              onChange: (event) => setCreateForm({ ...createForm, title: event.target.value }),
+            }),
+          ),
+          h(Field, { label: '平台' },
+            h('select', {
+              className: 'nvs-search', style: { margin: 0 },
+              value: createForm.platform,
+              onChange: (event) => setCreateForm({ ...createForm, platform: event.target.value }),
+            }, ['番茄', '起点', '晋江', '知乎盐选', '纯文学', '暂不指定'].map((label) => h('option', { key: label, value: label }, label))),
+          ),
+          h(Field, { label: '题材' },
+            h('input', {
+              className: 'nvs-search', type: 'text', value: createForm.genre,
+              placeholder: '都市 / 悬疑 / 玄幻…（可空）',
+              onChange: (event) => setCreateForm({ ...createForm, genre: event.target.value }),
+            }),
+          ),
+          h(Field, { label: '文风' },
+            h('input', {
+              className: 'nvs-search', type: 'text', value: createForm.tone,
+              placeholder: '冷峻 / 华丽 / 细腻…（可空）',
+              onChange: (event) => setCreateForm({ ...createForm, tone: event.target.value }),
+            }),
+          ),
+          h(Field, { label: '篇幅' },
+            h('select', {
+              className: 'nvs-search', style: { margin: 0 },
+              value: createForm.length,
+              onChange: (event) => setCreateForm({ ...createForm, length: event.target.value }),
+            }, ['短篇', '中篇', '长篇连载'].map((label) => h('option', { key: label, value: label }, label))),
+          ),
+          h(Field, { label: t('chapterWords') },
+            h(Stepper, {
+              value: createForm.chapterWords, min: 800, max: 8000, step: 100,
+              onChange: (value) => setCreateForm({ ...createForm, chapterWords: value }),
+            }),
+          ),
+          h(Field, { label: t('twist') },
+            h(Stepper, {
+              value: createForm.twist, min: 0, max: 100,
+              onChange: (value) => setCreateForm({ ...createForm, twist: value }),
+            }),
+          ),
+          h('div', { className: 'nvs-actions', style: { marginBottom: 0 } },
+            h('button', { className: 'nvs-primary', onClick: createProject, disabled: createBusy }, createBusy ? t('loading') : t('createProject')),
+          ),
+          createMessage ? h('p', { className: 'nvs-hint' }, createMessage) : h('p', { className: 'nvs-hint' }, t('createHint')),
+        ),
         h(PanelCard, { title: t('recent'), sub: projects.length === 0 ? t('noProjects') : null },
+          h('div', { className: 'nvs-actions', style: { margin: '0 0 6px' } },
+            h('button', { className: 'nvs-btn', onClick: () => showStudioView('style') }, `◇ ${t('learnStyle')}`),
+          ),
           projects.map((item) => h('div', { className: 'nvs-kv', key: item.slug },
             h('span', { style: { flex: 1, minWidth: 0 } }, item.title),
             h('small', null, `${item.stage} · ${item.chapters} 章`),
