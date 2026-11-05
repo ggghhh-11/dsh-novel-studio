@@ -228,3 +228,58 @@ test('platform_scan records the platform and returns a trend-analyst prompt', as
   const raw = JSON.parse(fs.readFileSync(path.join(projectDir, 'project.json'), 'utf8'))
   assert.equal(raw.platform, '番茄')
 })
+
+const STYLE_ORIGINAL = [
+  '他走进房间的时候，忽然看见桌上有一封信。信纸微微发黄，仿佛已经放了很久。',
+  '他不禁愣了一下，随即走过去拆开信，读了一遍。窗外的雨还在下，屋檐滴水的声音很轻。',
+  '他把信放回桌上，转身离开。走到门口的时候，他停了一下，又继续往前走。',
+].join('\n\n')
+
+const STYLE_REVISED = [
+  '他推门进去。桌上有一封信。信纸发黄。',
+  '他愣了一下，走过去拆开信，读了两遍。窗外的雨还在下。屋檐在滴水。',
+  '他把信放回去，转身离开。走到门口，他停了一下，又往前走。',
+  '走廊里没有人，灯也没有开。他摸黑下了楼，听见自己的脚步声。雨声从门口传进来，他把衣领竖起来，走进雨里。',
+].join('\n\n')
+
+test('output_done keeps a version backup', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '备份测试' }, exec)
+  const projectDir = path.join(cwd, 'novel', fs.readdirSync(path.join(cwd, 'novel'))[0])
+  const file = path.join(projectDir, '第001章.txt')
+  fs.writeFileSync(file, '正文内容。'.repeat(30), 'utf8')
+  const done = await studio.execute({ action: 'output_done', kind: 'draft', file }, exec)
+  assert.equal(done.ok, true)
+  const versions = fs.readdirSync(path.join(projectDir, 'versions'))
+  assert.ok(versions.some((name) => name.startsWith('第001章.txt.')))
+})
+
+test('learn_style stores traits and injects them into draft', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '风格书' }, exec)
+  const projectDir = path.join(cwd, 'novel', fs.readdirSync(path.join(cwd, 'novel'))[0])
+  const originalPath = path.join(projectDir, 'original.txt')
+  fs.writeFileSync(originalPath, STYLE_ORIGINAL, 'utf8')
+  const learned = await studio.execute({
+    action: 'learn_style',
+    originalPath,
+    revised: STYLE_REVISED,
+    chapter: 2,
+    label: '用户改稿',
+  }, exec)
+  assert.equal(learned.ok, true)
+  assert.ok(learned.data.stats.changes > 0)
+  assert.ok(Array.isArray(learned.data.traits))
+  assert.ok(learned.data.traits.length >= 1)
+  const listed = await studio.execute({ action: 'style' }, exec)
+  assert.ok(listed.data.memory.traits.length >= 1)
+  const draft = await studio.execute({ action: 'draft', chapter: 2 }, exec)
+  assert.ok(draft.message.includes('作者风格记忆'))
+  const cleared = await studio.execute({ action: 'style', clear: true }, exec)
+  assert.equal(cleared.ok, true)
+  assert.equal(cleared.data.cleared, true)
+})
