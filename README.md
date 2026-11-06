@@ -111,6 +111,10 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
 | `platform_brief` | 保存 3–6 条当前平台风向/禁忌（`guidance`），自动注入后续生成与审稿；`clear=true` 清空 |
 | `next` | 返回当前阶段可执行的操作清单，用于先问用户「要生成什么」 |
 | `debate_plan` | 审稿分歧辩论：`disputes` 生成两轮交叉质询 + 裁决主持 workflow 脚本 |
+| `revision_impact` | 判断用户改稿是否改变大纲：返回影响分析提示词，并提示先问用户是否同步改大纲 |
+| `outline_revision` | 根据影响分析生成「修订大纲」提示词（输出完整新大纲，不改正文） |
+| `outline_apply` | 保存修订后的大纲（旧版备份到 `history/`），返回审稿角色组让用户选择 |
+| `workspace` | 查看或切换工作区（`workspace='D:\\path'`），切换后可操作该目录下的项目 |
 | `settings` | 读写面板快捷设置（含输出方式/目录/自动预览/主题/跳脱值） |
 
 ### `novel_scan`
@@ -198,6 +202,17 @@ git clone https://github.com/ggghhh-11/dsh-novel-studio.git
   - 当前结果够用；
   - 下次再来（`checkpoint` 保存进度，下次恢复）。
 - `checkpoint` 会把进度写入项目目录的 `checkpoint.md` / `checkpoint.json`，并用运行时状态记住项目与最近文件。
+
+## 改稿影响大纲时
+
+用户回输某一章的改稿后，插件不会只看文风：
+
+1. `learn_style` 照常学习写作习惯；
+2. `revision_impact` 通读改稿，对照原稿、全书大纲、章纲、已记录钩子，输出影响分析 JSON（`hasOutlineImpact`、影响点、建议改动）；
+3. 若有影响，先问用户：「只学习写作习惯，不改大纲」还是「同步修改大纲」；
+4. 用户选「只学习」→ 保留习惯，不做其他处理；
+5. 用户选「同步修改」→ `outline_revision` 拿修订指令，生成完整新大纲，`outline_apply` 保存（旧版自动备份到 `history/`）；
+6. 保存后问用户「这版是否符合预期」；确认后问「用哪些子智能体审校新大纲」（大纲默认组 / 全开 32 / 精简），再 `review_plan(target='outline', roles=[...])`。
 
 ## 多轮后仍不满意
 
