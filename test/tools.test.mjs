@@ -128,6 +128,7 @@ test('scan flags telegraphic prose as a suggestion, not a forced rewrite', async
 })
 
 test('status on an empty workspace guides instead of creating', async () => {
+  process.env.DSH_PROFILE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-empty-'))
   const cwd = tempDir()
   const { studio } = makeTools()
   const result = await studio.execute({ action: 'status' }, execFor(cwd))
@@ -380,4 +381,56 @@ test('record stores final decisions', async () => {
   const raw = JSON.parse(fs.readFileSync(path.join(projectDir, 'reviews', 'round-1-draft.json'), 'utf8'))
   assert.equal(raw.decisions.length, 1)
   assert.equal(raw.decisions[0].verdict, 'reject')
+})
+
+test('revision_impact builds an outline-impact task', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '影响测试' }, exec)
+  await studio.execute({ action: 'outline_apply', outlineText: '# 大纲\n主角从废物成长为管理员。' }, exec)
+  const result = await studio.execute({
+    action: 'revision_impact',
+    original: '陈默被判定为 F 级废物，进入虚拟世界。',
+    revised: '陈默其实是世界管理员，进入虚拟世界后直接通关。',
+    chapter: 1,
+  }, exec)
+  assert.equal(result.ok, true)
+  assert.ok(result.data.prompt.includes('hasOutlineImpact'))
+  assert.ok(result.data.prompt.includes('全书大纲'))
+  assert.equal(result.data.askUser, '这次改动是否同步修改大纲？')
+})
+
+test('outline_apply saves the new outline and offers reviewer sets', async () => {
+  const cwd = tempDir()
+  const { studio } = makeTools()
+  const exec = execFor(cwd)
+  await studio.execute({ action: 'start', title: '大纲测试' }, exec)
+  const projectDir = path.join(cwd, 'novel', fs.readdirSync(path.join(cwd, 'novel'))[0])
+  const applied = await studio.execute({
+    action: 'outline_apply',
+    outlineText: '# 新大纲\n主角提前揭示管理员身份。',
+  }, exec)
+  assert.equal(applied.ok, true)
+  assert.ok(fs.existsSync(path.join(projectDir, '大纲.txt')))
+  assert.ok(applied.data.roleOptions.length >= 3)
+  assert.ok(applied.data.roleOptions[0].roles.length > 0)
+  const plan = await studio.execute({
+    action: 'review_plan',
+    target: 'outline',
+    roles: applied.data.roleOptions[0].roles,
+  }, exec)
+  assert.equal(plan.ok, true)
+  assert.ok(plan.data.reviewers.length >= applied.data.roleOptions[0].roles.length)
+})
+
+test('workspace switches and lists the projects of another directory', async () => {
+  const first = tempDir()
+  const second = tempDir()
+  const { studio } = makeTools()
+  await studio.execute({ action: 'start', title: '第一本' }, execFor(first))
+  await studio.execute({ action: 'start', title: '第二本' }, execFor(second))
+  const switched = await studio.execute({ action: 'workspace', workspace: second }, execFor(first))
+  assert.equal(switched.ok, true)
+  assert.ok(switched.data.projects.some((item) => item.title === '第二本'))
 })
