@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { createStudioTools } from '../lib/tools.js'
 import { normalizeConfig } from '../lib/config.js'
+import { readRuntime } from '../lib/store.js'
 
 // Keep runtime state (checkpoint/settings) inside a throwaway profile.
 process.env.DSH_PROFILE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-runtime-'))
@@ -25,7 +26,7 @@ function fakeContext() {
 
 function execFor(cwd) {
   return {
-    agent: { id: 'test', session: { header: { cwd } } },
+    agent: { id: 'test', session: { id: 'test-session', header: { cwd } } },
     signal: new AbortController().signal,
   }
 }
@@ -158,6 +159,8 @@ test('output_done registers a TXT file and bumps the output version', async () =
   assert.equal(raw.outputs.length, 1)
   assert.equal(raw.outputMode, 'file')
   assert.equal(raw.outputDir, '我的输出')
+  const checkpoint = readRuntime().checkpoint
+  assert.equal(checkpoint?.sessionId, 'test-session')
 })
 
 test('output_done rejects empty files and paths outside the workspace', async () => {
